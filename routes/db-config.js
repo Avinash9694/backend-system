@@ -112,7 +112,18 @@ app.post("/api/register", async (req, res) => {
       });
       connection.query(insert_query, (err, result) => {
         connection.release();
-        res.sendStatus(201);
+        return res.status(201).json({
+          status: "success",
+          message: "User successfully registered!",
+          data: {
+            user_id: req.body.user_id,
+            username: req.body.username,
+            email: req.body.email,
+            full_name: req.body.full_name,
+            age: req.body.age,
+            gender: req.body.gender,
+          },
+        });
       });
     });
   } catch (err) {
@@ -137,7 +148,7 @@ app.post("/api/token", (req, res) => {
     }
 
     db.getConnection(async (err, connection) => {
-      const sqlSearch = "Select * from userTable where username = ?";
+      const sqlSearch = "Select * from usertable where username = ?";
       const search_name = mysql.format(sqlSearch, [username]);
       connection.query(search_name, async (err, result) => {
         connection.release();
@@ -158,7 +169,7 @@ app.post("/api/token", (req, res) => {
               { expiresIn: "1h" }
             );
             res.status(200).send({
-              success: "success",
+              status: "success",
               message: "Access token generated successfully.",
               data: {
                 access_token: token,
@@ -176,6 +187,229 @@ app.post("/api/token", (req, res) => {
       });
     });
   } catch (err) {
+    return res.status(500).json({
+      status: "error",
+      code: "INTERNAL_SERVER_ERROR",
+      message: "An internal server error occurred. Please try again later.",
+    });
+  }
+});
+
+const auth_token = async (req, res, next) => {
+  try {
+    const decode = JWT.verify(
+      req.headers.authorization,
+      process.env.JWT_SECRET
+    );
+    req.user = decode;
+    next();
+  } catch (error) {
+    return res.status(400).json({
+      status: "error",
+      code: "INVALID_TOKEN",
+      message: "Invalid access token provided",
+    });
+  }
+};
+
+app.post("/api/data", auth_token, async (req, res) => {
+  try {
+    const key = req.body.key;
+    const value = req.body.value;
+
+    if (!key) {
+      return res.status(400).json({
+        status: "error",
+        code: "INVALID_KEY",
+        message: "The provided key is not valid or missing.",
+      });
+    }
+
+    if (!value) {
+      return res.status(400).json({
+        status: "error",
+        code: "INVALID_VALUE",
+        message: "The provided value is not valid or missing.",
+      });
+    }
+
+    db.getConnection(async (err, connection) => {
+      const sqlSearch = "SELECT * FROM datatable WHERE `key` = ?";
+      const search_key = mysql.format(sqlSearch, [key]);
+      const sqlInsertKey = "INSERT INTO datatable  VALUES (0,?, ?)";
+      const insert_key = mysql.format(sqlInsertKey, [key, value]);
+      connection.query(search_key, async (err, result) => {
+        connection.release();
+
+        if (result.length != 0) {
+          return res.status(409).json({
+            status: "error",
+            code: "KEY_EXISTS",
+            message:
+              "The provided key already exists in the database. To update an existing key, use the update API.",
+          });
+        } else {
+          connection.query(insert_key, async (err, result) => {
+            return res.status(201).json({
+              status: "success",
+              message: "Data stored successfully.",
+            });
+          });
+        }
+      });
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({
+      status: "error",
+      code: "INTERNAL_SERVER_ERROR",
+      message: "An internal server error occurred. Please try again later.",
+    });
+  }
+});
+
+app.get("/api/data/:key", auth_token, async (req, res) => {
+  try {
+    const key = req.params.key;
+
+    if (!key) {
+      return res.status(400).json({
+        status: "error",
+        code: "INVALID_KEY",
+        message: "The provided key is not valid or missing.",
+      });
+    }
+
+    db.getConnection(async (err, connection) => {
+      const sqlSearch = "SELECT * FROM datatable WHERE `key` = ?";
+      const search_key = mysql.format(sqlSearch, [key]);
+
+      connection.query(search_key, async (err, result) => {
+        connection.release();
+
+        if (result.length === 0) {
+          return res.status(404).json({
+            status: "error",
+            code: "KEY_NOT_FOUND",
+            message: "The provided key does not exist in the database.",
+          });
+        } else {
+          const value = result[0].value;
+          return res.status(200).json({
+            status: "success",
+            data: {
+              key: key,
+              value: value,
+            },
+          });
+        }
+      });
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({
+      status: "error",
+      code: "INTERNAL_SERVER_ERROR",
+      message: "An internal server error occurred. Please try again later.",
+    });
+  }
+});
+
+app.put("/api/data/:key", auth_token, async (req, res) => {
+  try {
+    const key = req.params.key;
+    const value = req.body.value;
+
+    if (!key) {
+      return res.status(400).json({
+        status: "error",
+        code: "INVALID_KEY",
+        message: "The provided key is not valid or missing.",
+      });
+    }
+
+    if (!value) {
+      return res.status(400).json({
+        status: "error",
+        code: "INVALID_VALUE",
+        message: "The provided value is not valid or missing.",
+      });
+    }
+
+    db.getConnection(async (err, connection) => {
+      const sqlSearch = "SELECT * FROM datatable WHERE `key` = ?";
+      const search_key = mysql.format(sqlSearch, [key]);
+      const sqlUpdateKey = "UPDATE datatable SET value = ? WHERE `key` = ?";
+      const update_key = mysql.format(sqlUpdateKey, [value, key]);
+
+      connection.query(search_key, async (err, result) => {
+        connection.release();
+
+        if (result.length === 0) {
+          return res.status(404).json({
+            status: "error",
+            code: "KEY_NOT_FOUND",
+            message: "The provided key does not exist in the database.",
+          });
+        } else {
+          connection.query(update_key, async (err, result) => {
+            return res.status(200).json({
+              status: "success",
+              message: "Data updated successfully.",
+            });
+          });
+        }
+      });
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({
+      status: "error",
+      code: "INTERNAL_SERVER_ERROR",
+      message: "An internal server error occurred. Please try again later.",
+    });
+  }
+});
+
+app.delete("/api/data/:key", auth_token, async (req, res) => {
+  try {
+    const key = req.params.key;
+
+    if (!key) {
+      return res.status(400).json({
+        status: "error",
+        code: "INVALID_KEY",
+        message: "The provided key is not valid or missing.",
+      });
+    }
+
+    db.getConnection(async (err, connection) => {
+      const sqlSearch = "SELECT * FROM datatable WHERE `key` = ?";
+      const search_key = mysql.format(sqlSearch, [key]);
+      const sqlDeleteKey = "DELETE FROM datatable WHERE `key` = ?";
+      const delete_key = mysql.format(sqlDeleteKey, [key]);
+
+      connection.query(search_key, async (err, result) => {
+        connection.release();
+
+        if (result.length === 0) {
+          return res.status(404).json({
+            status: "error",
+            code: "KEY_NOT_FOUND",
+            message: "The provided key does not exist in the database.",
+          });
+        } else {
+          connection.query(delete_key, async (err, result) => {
+            return res.status(200).json({
+              status: "success",
+              message: "Data deleted successfully.",
+            });
+          });
+        }
+      });
+    });
+  } catch (err) {
+    console.error(err);
     return res.status(500).json({
       status: "error",
       code: "INTERNAL_SERVER_ERROR",
