@@ -6,11 +6,12 @@ import JWT from "jsonwebtoken";
 
 const router = Router();
 
+//allow registered user to generate token
 router.post("/", async (req, res) => {
   try {
     const username = req.body.username;
     const password = req.body.password;
-    //validation
+    // checks if username and password is not empty
     if (!username || !password) {
       return res.status(404).send({
         status: "MISSING_FIELDS",
@@ -18,12 +19,14 @@ router.post("/", async (req, res) => {
       });
     }
 
+    //check if username is in db or not
     db.getConnection(async (err, connection) => {
       const sqlSearch = "Select * from usertable where username = ?";
       const search_name = mysql.format(sqlSearch, [username]);
       connection.query(search_name, async (err, result) => {
         connection.release();
 
+        //return error if username is not in db
         if (result.length == 0) {
           return res.status(404).send({
             status: "INVALID_CREDENTIALS",
@@ -31,8 +34,9 @@ router.post("/", async (req, res) => {
               "Invalid credentials. The provided username or password is incorrect.",
           });
         } else {
-          const hashedPassword = result[0].password;
           //get the hashedPassword from result
+          const hashedPassword = result[0].password;
+          //checks if entered password is correct or not
           if (await bcrypt.compare(password, hashedPassword)) {
             const token = JWT.sign(
               { _id: username._id },
@@ -58,6 +62,7 @@ router.post("/", async (req, res) => {
       });
     });
   } catch (err) {
+    //throws error if the there is something wrong while entering data
     return res.status(500).json({
       status: "error",
       code: "INTERNAL_SERVER_ERROR",

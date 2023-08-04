@@ -1,15 +1,18 @@
 import express, { json } from "express";
 const app = express();
+
 import dotenv from "dotenv";
 dotenv.config();
-const port = process.env.PORT || 3000;
+
 import auth_token from "./auth.js";
 import registerRoute from "./register.js";
 import tokenRoute from "./token.js";
 import dataRoute from "./data.js";
 
-app.use(json());
+const port = process.env.PORT || 3000;
 
+app.use(json());
+//adding endpoints for register and token generation
 app.use("/api/register", registerRoute);
 app.use("/api/token", tokenRoute);
 
